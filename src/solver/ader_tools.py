@@ -134,7 +134,7 @@ def set_recalculate_jac(recalculate_jacobian):
 
 	return fcn
 
-def recalculate_jacobian_on(solver, U_pred, dt, Sjac=None):
+def recalculate_jacobian_on(solver, U_pred, A_pred, AGrad_pred, dt, Sjac=None):
 	'''
 	Method to recalculate the jacobian at each subiteration 
 	of a nonlinear solver. Note: This has only been useful in very 
@@ -170,16 +170,22 @@ def recalculate_jacobian_on(solver, U_pred, dt, Sjac=None):
 	physics.source_terms = physics.implicit_sources.copy()
 
 	Uq = helpers.evaluate_state(U_pred, basis_val_st)
+	Aq = helpers.evaluate_state(A_pred, basis_val_st)
+	AGradq = helpers.evaluate_state(AGrad_pred, basis_val_st)
 
 	U_bar = helpers.get_element_mean(Uq, quad_wts_st, 
+			np.tile(djac_elems, [1, nq_t, 1])*dt/2., dt*vol_elems)
+	A_bar = helpers.get_element_mean(Aq, quad_wts_st, 
+			np.tile(djac_elems, [1, nq_t, 1])*dt/2., dt*vol_elems)
+	AGrad_bar = helpers.get_element_mean(AGradq, quad_wts_st, 
 			np.tile(djac_elems, [1, nq_t, 1])*dt/2., dt*vol_elems)
 
 	# Calculate the source term Jacobian using average state
 	Sjac = Sjac.reshape([U_pred.shape[0], 1, ns, ns])
 	Sjac[:] = 0.
 	# Sjac = np.zeros([U_pred.shape[0], 1, ns, ns])
-	Sjac = physics.eval_source_term_jacobians(U_bar, x_elems, solver.time,
-			Sjac)
+	Sjac = physics.eval_source_term_jacobians(U_bar, A_bar, AGrad_bar,
+			x_elems, solver.time, Sjac)
 	Sjac = np.reshape(Sjac, [nelem, ns, ns])
 
 	# Set all sources for source_coeffs calculation
@@ -561,7 +567,7 @@ def smsflux(SMS, flux):
 	return np.sum(x, axis=3)
 
 
-def predictor_elem_explicit(solver, dt, W, U_pred):
+def predictor_elem_explicit(solver, dt, W, A_pred, AGrad_pred, U_pred):
 	'''
 	Calculates the predicted solution state for the ADER-DG method using a
 	nonlinear solve of the weak form of the DG discretization in time.
@@ -614,7 +620,7 @@ def predictor_elem_explicit(solver, dt, W, U_pred):
 
 	# Calculate the source and flux coefficients with initial guess
 	source_coeffs = solver.source_coefficients(dt, order, basis_st,
-			U_pred)
+			U_pred, A_pred, AGrad_pred)
 	flux_coeffs = solver.flux_coefficients(dt, order, basis_st,
 			U_pred)
 
@@ -640,7 +646,7 @@ def predictor_elem_explicit(solver, dt, W, U_pred):
 		U_pred = np.copy(U_pred_new)
 		
 		source_coeffs = solver.source_coefficients(dt, order,
-				basis_st, U_pred)
+				basis_st, U_pred, A_pred, AGrad_pred)
 		flux_coeffs = solver.flux_coefficients(dt, order, basis_st,
 				U_pred)
 
@@ -651,7 +657,7 @@ def predictor_elem_explicit(solver, dt, W, U_pred):
 	return U_pred # [ne, nb_st, ns]
 
 
-def predictor_elem_implicit(solver, dt, W, U_pred):
+def predictor_elem_implicit(solver, dt, W, U_pred, A_pred, AGrad_pred):
 	'''
 	Calculates the predicted solution state for the ADER-DG method using a
 	nonlinear solve of the weak form of the DG discretization in time.
@@ -723,7 +729,7 @@ def predictor_elem_implicit(solver, dt, W, U_pred):
 
 	# Calculate the source and flux coefficients with initial guess
 	source_coeffs = solver.source_coefficients(dt, order, basis_st,
-			U_pred)
+			U_pred, A_pred, AGrad_pred)
 	flux_coeffs = solver.flux_coefficients(dt, order, basis_st,
 			U_pred)
 
@@ -782,7 +788,7 @@ def predictor_elem_implicit(solver, dt, W, U_pred):
 		U_pred = np.copy(U_pred_new)
 
 		source_coeffs = solver.source_coefficients(dt, order,
-				basis_st, U_pred)
+				basis_st, U_pred, A_pred, AGrad_pred)
 		flux_coeffs = solver.flux_coefficients(dt, order, basis_st,
 				U_pred)
 
@@ -795,7 +801,7 @@ def predictor_elem_implicit(solver, dt, W, U_pred):
 	return U_pred #_update # [ne, nb_st, ns]
 
 
-def predictor_elem_stiffimplicit(solver, dt, W, U_pred):
+def predictor_elem_stiffimplicit(solver, dt, W, A_pred, AGrad_pred, U_pred):
 	'''
 	Calculates the predicted solution state for the ADER-DG method using a
 	nonlinear solve of the weak form of the DG discretization in time.
@@ -850,7 +856,7 @@ def predictor_elem_stiffimplicit(solver, dt, W, U_pred):
 
 	# Calculate the source and flux coefficients with initial guess
 	source_coeffs = solver.source_coefficients(dt, order, basis_st,
-			U_pred)
+			U_pred, A_pred, AGrad_pred)
 	flux_coeffs = solver.flux_coefficients(dt, order, basis_st,
 			U_pred)
 

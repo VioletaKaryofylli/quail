@@ -33,6 +33,8 @@ Physics = {
 a = 0.9
 InitialCondition = {
 	"Function" : "SmoothIsentropicFlow",
+	"Area": 1.0,
+	"AreaGradient": 0.0,
 	"a" : a,
 }
 

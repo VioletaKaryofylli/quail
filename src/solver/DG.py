@@ -820,7 +820,7 @@ class DG(base.SolverBase):
 		self.bface_helpers.compute_helpers(mesh, physics, basis,
 				self.order)
 
-	def get_element_residual(self, Uc, res_elem):
+	def get_element_residual(self, Uc, Ac, AGradc, res_elem):
 		# Unpack
 		physics = self.physics
 		ns = physics.NUM_STATE_VARS
@@ -836,10 +836,14 @@ class DG(base.SolverBase):
 		fluxes = self.params["ConvFluxSwitch"]
 		sources = self.params["SourceSwitch"]
 
-		# Interpolate state at quad points
+		# Interpolate state and area at quad points
 		Uq = helpers.evaluate_state(Uc, basis_val,
 				skip_interp=self.basis.skip_interp) # [ne, nq, ns]
-		
+		Aq = helpers.evaluate_state(Ac, basis_val,
+				skip_interp=self.basis.skip_interp) # [ne, nq, ns]
+		AGradq = helpers.evaluate_state(AGradc, basis_val,
+				skip_interp=self.basis.skip_interp) # [ne, nq, ns]
+
 		# Interpolate gradient of state at quad points
 		gUq = self.evaluate_gradient(Uc, basis_phys_grad_elems)
 
@@ -864,7 +868,7 @@ class DG(base.SolverBase):
 			# eval_source_terms is an additive function so source needs to be
 			# initialized to zero for each time step
 			Sq = np.zeros_like(Uq) # [ne, nq, ns]
-			Sq = physics.eval_source_terms(Uq, x_elems, self.time, Sq)
+			Sq = physics.eval_source_terms(Uq, Aq, AGradq, x_elems, self.time, Sq)
 					# [ne, nq, ns]
 
 			res_elem += solver_tools.calculate_source_term_integral(

@@ -73,6 +73,7 @@ class Euler(base.PhysicsBase):
 			base_BC_type.Extrapolate : base_fcns.Extrapolate,
 			euler_BC_type.SlipWall : euler_fcns.SlipWall,
 			euler_BC_type.PressureOutlet : euler_fcns.PressureOutlet,
+			euler_BC_type.SubsonicInflow : euler_fcns.SubsonicInflow,
 		})
 
 	def set_physical_params(self, GasConstant=287., SpecificHeatRatio=1.4):
@@ -217,6 +218,8 @@ class Euler1D(Euler):
 		d = {
 			euler_fcn_type.SmoothIsentropicFlow :
 					euler_fcns.SmoothIsentropicFlow,
+			euler_fcn_type.Quasi1DNozzle : euler_fcns.Quasi1DNozzle,
+			euler_fcn_type.Quasi1DNozzleSupersonic : euler_fcns.Quasi1DNozzleSupersonic,
 			euler_fcn_type.MovingShock : euler_fcns.MovingShock,
 			euler_fcn_type.DensityWave : euler_fcns.DensityWave,
 			euler_fcn_type.RiemannProblem : euler_fcns.RiemannProblem,
@@ -230,6 +233,7 @@ class Euler1D(Euler):
 
 		self.source_map.update({
 			euler_source_type.StiffFriction : euler_fcns.StiffFriction,
+			euler_source_type.Quasi1DNozzleSource : euler_fcns.Quasi1DNozzleSource,
 		})
 
 		self.conv_num_flux_map.update({

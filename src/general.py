@@ -177,8 +177,13 @@ class PhysicsType(Enum):
 		# Model for 2nd order pendulum ODE (0D model)
 	MultispeciesPSR = auto()
 		# Model for PSR (with H2/Air chemistry)
-		
-		
+
+class Quasi1D(Enum):
+	'''
+	This enum contains the flag the Quasi 1D activation.
+	'''
+	Quasi1D = auto()
+
 class TransportType(Enum):
 	'''
 	This enum contains the available transport types for Navier-Stokes.

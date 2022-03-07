@@ -388,13 +388,13 @@ class SimpleSource(SourceBase):
 		'''
 		self.nu = nu
 
-	def get_source(self, physics, Uq, x, t):
+	def get_source(self, physics, Uq, Aq, AGradq, x, t):
 		nu = self.nu
 		S = nu*Uq
 
 		return S
 
-	def get_jacobian(self, physics, Uq, x, t):
+	def get_jacobian(self, physics, Uq, Aq, AGradq, x, t):
 		return self.nu
 
 

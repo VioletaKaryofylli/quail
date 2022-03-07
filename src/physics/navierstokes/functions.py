@@ -190,7 +190,7 @@ class ManufacturedSource(SourceBase):
 	be found in the following paper.
 		[1] Dumbser, M. (2010)
 	'''
-	def get_source(self, physics, Uq, x, t):
+	def get_source(self, physics, Uq, Aq, AGradq, x, t):
 		# Unpack
 		gamma = physics.gamma
 		R = physics.R

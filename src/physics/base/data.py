@@ -55,6 +55,38 @@ class FcnBase(ABC):
 		'''
 		pass
 
+class FcnBaseQuasi1D(FcnBase):
+	'''
+	This is an abstract base class for evaluating a given analytical
+	function for initial conditions, exact solutions, and/or
+	boundary conditions.
+
+	Abstract Methods:
+	-----------------
+	get_state
+		computes the state variables
+	'''
+	def __init__(self, Area = 1.0, AreaGradient = 0.0):
+		self.Area = Area
+		self.AreaGradient = AreaGradient
+
+	@abstractmethod
+	def get_state(self, physics, x, t):
+		'''
+		This method computes the state variables.
+
+		Inputs:
+		-------
+			physics: physics object
+			x: coordinates in physical space (typically the quadrature
+				points) [nq, ndims]
+			t: time
+
+		Outputs:
+		--------
+			Uq: values of the state variables at x [nq, ns]
+		'''
+		pass
 
 class BCBase(ABC):
 	'''
@@ -178,7 +210,7 @@ class SourceBase(ABC):
 			self.source_treatment = 'Implicit'
 
 	@abstractmethod
-	def get_source(self, physics, Uq, x, t):
+	def get_source(self, physics, Uq, Aq, AGradq, x, t):
 		'''
 		This method evaluates the source term.
 
@@ -196,7 +228,7 @@ class SourceBase(ABC):
 		'''
 		pass
 
-	def get_jacobian(self, physics, Uq, x, t):
+	def get_jacobian(self, physics, Uq, Aq, AGradq, x, t):
 		'''
 		This method evaluates the Jacobian of the source term.
 

@@ -79,10 +79,17 @@ class SourceSolvers():
 		def take_time_step(self, solver):
 			mesh = solver.mesh
 			U = solver.state_coeffs
+			quasi1D = solver.params["Quasi1D"]
+			if quasi1D:
+				Area = solver.Area
+				AreaGradient = solver.AreaGradient
+			else:
+				Area = np.ones([U.shape[0], U.shape[1], 1])
+				AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 
 			res = self.res
 
-			res = solver.get_residual(U, res)
+			res = solver.get_residual(U, Area, AreaGradient, res)
 			dU = mult_inv_mass_matrix(mesh, solver, self.dt, res)
 
 			A, iA = self.get_jacobian_matrix(mesh, solver)
@@ -112,15 +119,23 @@ class SourceSolvers():
 			nb = basis.nb
 			physics = solver.physics
 			U = solver.state_coeffs
+			quasi1D = solver.params["Quasi1D"]
+			if quasi1D:
+				Area = solver.Area
+				AreaGradient = solver.AreaGradient
+			else:
+				Area = np.ones([U.shape[0], U.shape[1], 1])
+				AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 			ns = physics.NUM_STATE_VARS
 
 			iMM_elems = solver.elem_helpers.iMM_elems
 
-			A, iA = self.get_jacobian_matrix_elems(solver, iMM_elems, U)
+			A, iA = self.get_jacobian_matrix_elems(solver, iMM_elems, U,
+										  Area, AreaGradient)
 
 			return A, iA # [nelem, nb, nb, ns]
 
-		def get_jacobian_matrix_elems(self, solver, iMM_elems, Uc):
+		def get_jacobian_matrix_elems(self, solver, iMM_elems, Uc, Ac, AGradc):
 			'''
 			Calculates the Jacobian matrix of the source term and its
 			inverse for each element. Definition of 'Jacobian' matrix:
@@ -156,10 +171,14 @@ class SourceSolvers():
 
 			Uq = helpers.evaluate_state(Uc, basis_val,
 					skip_interp=solver.basis.skip_interp) # [ne, nq, ns])
+			Aq = helpers.evaluate_state(Ac, basis_val,
+					skip_interp=solver.basis.skip_interp) # [ne, nq, ns]
+			AGradq = helpers.evaluate_state(AGradc, basis_val,
+					skip_interp=solver.basis.skip_interp) # [ne, nq, ns]
 
 			# Evaluate the source term Jacobian [ne, nq, ns, ns]
 			Sjac = np.zeros([nelem, nq, ns, ns])
-			Sjac = physics.eval_source_term_jacobians(Uq, x_elems,
+			Sjac = physics.eval_source_term_jacobians(Uq, Aq, AGradq, x_elems,
 					solver.time, Sjac)
 
 			# Call solver helper to get dRdU (see solver/tools.py)
@@ -188,6 +207,13 @@ class SourceSolvers():
 		def take_time_step(self, solver):
 			mesh = solver.mesh
 			U = solver.state_coeffs
+			quasi1D = solver.params["Quasi1D"]
+			if quasi1D:
+				Area = solver.Area
+				AreaGradient = solver.AreaGradient
+			else:
+				Area = np.ones([U.shape[0], U.shape[1], 1])
+				AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 
 			mesh = solver.mesh
 			elem_helpers = solver.elem_helpers
@@ -199,6 +225,10 @@ class SourceSolvers():
 
 			Uq = helpers.evaluate_state(U, basis_val,
 					skip_interp=solver.basis.skip_interp) # [ne, nq, ns])
+			Aq = helpers.evaluate_state(Area, basis_val,
+					skip_interp=solver.basis.skip_interp) # [ne, nq, ns]
+			AGradq = helpers.evaluate_state(AreaGradient, basis_val,
+					skip_interp=solver.basis.skip_interp) # [ne, nq, ns]
 
 			# Solve the nonlinear system to get the new solution. This is done
 			# for each element and each quadrature point, fully uncoupled. This
@@ -207,7 +237,7 @@ class SourceSolvers():
 			for i in range(Uq.shape[0]):
 				for j in range(Uq.shape[1]):
 					sol = scipy.optimize.root(self.rhs_sources, Uq[i, j], args=(solver,
-							x_elems[i, j], Uq[i, j]))
+							x_elems[i, j], Uq[i, j], Aq[i, j], AGradq[i, j]))
 					Uq[i, j] = sol.x
 
 			res = self.res
@@ -221,7 +251,7 @@ class SourceSolvers():
 
 			return res # [ne, nb, ns]
 
-		def rhs_sources(self, Uq_new, solver, x, Uq):
+		def rhs_sources(self, Uq_new, solver, x, Uq, Aq, AGradq):
 			Uq = Uq.reshape((1, 1, -1))
 			Uq_new = Uq_new.reshape((1, 1, -1))
 			x = x.reshape((1, 1, -1))
@@ -229,12 +259,12 @@ class SourceSolvers():
 
 			# Point at n
 			Sq = np.zeros_like(Uq)
-			Sq = solver.physics.eval_source_terms(Uq, x, solver.time,
-					Sq)
+			Sq = solver.physics.eval_source_terms(Uq, Aq, AGradq, x,
+					solver.time, Sq)
 			# Point at n+1
 			Sq_new = np.zeros_like(Uq_new)
-			Sq_new = solver.physics.eval_source_terms(Uq_new, x, solver.time,
-					Sq_new)
+			Sq_new = solver.physics.eval_source_terms(Uq_new, Aq, AGradq, x,
+					solver.time, Sq_new)
 			# Return RHS of trapezoid rule
 			return (Uq_new - Uq - .5*dt*(Sq_new + Sq))[0, 0] # [ns]
 

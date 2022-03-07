@@ -134,6 +134,10 @@ class SolverBase(ABC):
 		self.state_coeffs = np.zeros([mesh.num_elems,
 				self.basis.get_num_basis_coeff(self.order),
 				physics.NUM_STATE_VARS])
+		self.Area = np.zeros([mesh.num_elems,
+				self.basis.get_num_basis_coeff(self.order), 1])
+		self.AreaGradient = np.zeros([mesh.num_elems,
+				self.basis.get_num_basis_coeff(self.order), 1])
 
 		# Node type
 		node_type = params["NodeType"]
@@ -267,7 +271,7 @@ class SolverBase(ABC):
 		pass
 
 	@abstractmethod
-	def get_element_residual(self, Uc, res_elem):
+	def get_element_residual(self, Uc, Ac, AGradc, res_elem):
 		'''
 		Calculates the volume contribution to the residual for all elements.
 
@@ -351,12 +355,13 @@ class SolverBase(ABC):
 
 		U = self.state_coeffs
 		ns = physics.NUM_STATE_VARS
-		order = self.order
+		AreaNodes = self.Area
+		AreaGradientNodes = self.AreaGradient
 
 		# Get solution nodes or quadrature info
 		if not params["L2InitialCondition"]:
 			# Solution nodes
-			eval_pts = basis.get_nodes(order)
+			eval_pts = basis.get_nodes(self.order)
 		else:
 			# Quadrature
 
@@ -376,10 +381,19 @@ class SolverBase(ABC):
 		for elem_ID in range(mesh.num_elems):
 			xphys[elem_ID] = mesh_tools.ref_to_phys(mesh, elem_ID, eval_pts)
 		f = physics.IC.get_state(physics, x=xphys, t=self.time)
+		quasi1D = self.params["Quasi1D"]
+		if quasi1D:
+			Area = physics.IC.Area
+			AreaGradient = physics.IC.AreaGradient
+		else:
+			Area = np.ones([U.shape[0], U.shape[1], 1])
+			AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 
 		if not params["L2InitialCondition"]:
 			# Interpolate to solution nodes
 			solver_tools.interpolate_to_nodes(f, U)
+			solver_tools.interpolate_to_nodes(Area, AreaNodes)
+			solver_tools.interpolate_to_nodes(AreaGradient, AreaGradientNodes)
 		else:
 			# L2 projection
 			solver_tools.L2_projection(mesh, iMM_elems, basis, quad_pts,
@@ -432,7 +446,7 @@ class SolverBase(ABC):
 			solver_tools.L2_projection(mesh, iMM_elems, basis, quad_pts,
 					quad_wts, Uq_old, U)
 
-	def get_residual(self, U, res):
+	def get_residual(self, U, A, AGrad, res):
 		'''
 		Calculates the surface + volume integral for the DG formulation
 
@@ -455,12 +469,12 @@ class SolverBase(ABC):
 			res[:] = stepper.balance_const
 
 		self.get_boundary_face_residuals(U, res)
-		self.get_element_residuals(U, res)
+		self.get_element_residuals(U, A, AGrad, res)
 		self.get_interior_face_residuals(U, res)
 
 		return res
 
-	def get_element_residuals(self, U, res):
+	def get_element_residuals(self, U, A, AGrad, res):
 		'''
 		Wrapper for get_element_residual (just for consistency with how
 		interior/boundary face contributions are computed).
@@ -474,7 +488,7 @@ class SolverBase(ABC):
 			res: calculated residual array
 		'''
 
-		res = self.get_element_residual(U, res)
+		res = self.get_element_residual(U, A, AGrad, res)
 
 	def get_interior_face_residuals(self, U, res):
 		'''

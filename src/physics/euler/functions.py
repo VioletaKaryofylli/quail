@@ -28,8 +28,8 @@ from scipy.optimize import fsolve, root
 import errors
 import general
 
-from physics.base.data import (FcnBase, BCWeakRiemann, BCWeakPrescribed,
-        SourceBase, ConvNumFluxBase)
+from physics.base.data import (FcnBase, FcnBaseQuasi1D, BCWeakRiemann,
+        BCWeakPrescribed, SourceBase, ConvNumFluxBase)
 
 
 class FcnType(Enum):
@@ -39,6 +39,8 @@ class FcnType(Enum):
 	functions are specific to the available Euler equation sets.
 	'''
 	SmoothIsentropicFlow = auto()
+	Quasi1DNozzle = auto()
+	Quasi1DNozzleSupersonic = auto()
 	MovingShock = auto()
 	IsentropicVortex = auto()
 	DensityWave = auto()
@@ -54,6 +56,7 @@ class BCType(Enum):
 	'''
 	SlipWall = auto()
 	PressureOutlet = auto()
+	SubsonicInflow = auto()
 
 
 class SourceType(Enum):
@@ -62,6 +65,7 @@ class SourceType(Enum):
 	source terms are specific to the available Euler equation sets.
 	'''
 	StiffFriction = auto()
+	Quasi1DNozzleSource = auto()
 	TaylorGreenSource = auto()
 	GravitySource = auto()
 
@@ -157,6 +161,105 @@ class SmoothIsentropicFlow(FcnBase):
 			Uq[elem_ID, :, irhoE] = rhoE
 
 		return Uq # [ne, nq, ns]
+
+
+class Quasi1DNozzle(FcnBaseQuasi1D):
+	'''
+	Quasi 1D nozzle flow problem.
+	'''
+	def __init__(self, Area = 1.0, AreaGradient = 0.0):
+		'''
+		This method initializes the attributes.
+
+		Inputs:
+		-------
+		    a: parameter that controls magnitude of sinusoidal profile
+
+		Outputs:
+		--------
+		    self: attributes initialized
+		'''
+		super().__init__(Area, AreaGradient)
+
+	def get_state(self, physics, x, t):
+		srho, srhou, srhoE = physics.get_state_slices()
+		gamma = physics.gamma
+		Rg = physics.R
+
+		Uq = np.zeros([x.shape[0], x.shape[1], physics.NUM_STATE_VARS])
+
+		indOne = (x[:,:,0]<=0.5)
+		indTwo = ((x[:,:,0]>0.5) & (x[:,:,0]<=1.5))
+		indThree = (x[:,:,0]>1.5)
+
+		# State
+		self.Area = 1.0 + 2.2 * (x - 1.5)**2.
+		self.AreaGradient = 4.4 * x
+
+		rho = np.zeros([x.shape[0], x.shape[1], 1])
+		rho[indOne, 0] = 1.
+		rho[indTwo, 0] = 1. - 0.3146 * (x[indTwo,0] - 0.5)
+		rho[indThree, 0] = 0.634 - 0.3879 * (x[indThree,0] - 1.5)
+# 		rho = 1.0 - 0.3146 * (x - 1.5)
+
+		T = np.zeros([x.shape[0], x.shape[1], 1])
+		T[indOne, 0] = 1.
+		T[indTwo, 0] = 1. - 0.167 * (x[indTwo,0] - 0.5)
+		T[indThree, 0] = 0.833 - 0.3507 * (x[indThree,0] - 1.5)
+# 		T = ( 1. - 0.2319 * (x - 1.5))
+
+# 		p = 0.714 - (0.012 - 1.) / 3. * x
+
+		u = 0.59 / rho / self.Area
+
+		rhoE = rho * T / (gamma - 1.) + 0.5 * rho * u**2.
+
+		# Store
+		Uq[:, :, srho] = rho
+		Uq[:, :, srhou] = rho * u
+		Uq[:, :, srhoE] = rhoE
+
+		return Uq # [ne, nq, ns]
+
+
+class Quasi1DNozzleSupersonic(FcnBaseQuasi1D):
+	'''
+	Quasi 1D nozzle flow problem.
+	'''
+	def __init__(self, Area = 1.0, AreaGradient = 0.0):
+		'''
+		This method initializes the attributes.
+
+		Inputs:
+		-------
+		    a: parameter that controls magnitude of sinusoidal profile
+
+		Outputs:
+		--------
+		    self: attributes initialized
+		'''
+		super().__init__(Area, AreaGradient)
+
+	def get_state(self, physics, x, t):
+		srho, srhou, srhoE = physics.get_state_slices()
+
+		Uq = np.zeros([x.shape[0], x.shape[1], physics.NUM_STATE_VARS])
+
+		# State
+		self.Area = 1.39777 + 0.34760 * np.tanh(8. * x - 4.)
+		self.AreaGradient = 0.34760 * 8. * (1 - np.tanh(8. * x - 4.)**2)
+
+		rho = 0.50189
+		rhou = 0.65187
+		rhoE = 1.37567
+
+		# Store
+		Uq[:, :, srho] = rho
+		Uq[:, :, srhou] = rhou
+		Uq[:, :, srhoE] = rhoE
+
+		return Uq # [ne, nq, ns]
+
 
 
 class MovingShock(FcnBase):
@@ -400,8 +503,8 @@ class RiemannProblem(FcnBase):
 	xd: float
 		location of initial discontinuity
 	'''
-	def __init__(self, rhoL=1., uL=0., pL=1., rhoR=0.125, uR=0., pR=0.1,
-				xd=0.):
+	def __init__(self, rhoL=1., uL=0., pL=1., rhoR=0.125, uR=0., 
+			  pR=0.1, xd=0.):
 		'''
 		This method initializes the attributes.
 
@@ -785,6 +888,63 @@ class PressureOutlet(BCWeakPrescribed):
 		return UqB
 
 
+class SubsonicInflow(BCWeakPrescribed):
+	'''
+	This class corresponds to an outflow boundary condition with static
+	pressure prescribed. See documentation for more details.
+
+	Attributes:
+	-----------
+	p: float
+		pressure
+	'''
+	def __init__(self, rho, T):
+		'''
+		This method initializes the attributes.
+
+		Inputs:
+		-------
+			p: pressure
+
+		Outputs:
+		--------
+		    self: attributes initialized
+		'''
+		self.rho = rho
+		self.T = T
+
+	def get_boundary_state(self, physics, UqI, normals, x, t):
+		# Unpack
+		srho = physics.get_state_slice("Density")
+		srhoE = physics.get_state_slice("Energy")
+		smom = physics.get_momentum_slice()
+
+		gamma = physics.gamma
+		Rg = physics.R 
+		# Density and Energy
+		rhoB = self.rho
+		TB = self.T
+
+		# Interior velocity in normal direction
+		rhoI = UqI[:, :, srho]
+		velI = UqI[:, :, smom] / rhoI
+		velB = velI
+		rhoEB = rhoB * TB / (gamma - 1.) + 0.5 * velB**2 * rhoB
+
+		UqB = UqI.copy()
+
+		# Boundary density
+		UqB[:, :, srho] = rhoB
+
+		# Boundary velocity
+		UqB[:, :, smom] = rhoB*velB
+
+		# Boundary energy
+		UqB[:, :, srhoE] = rhoEB
+
+		return UqB
+
+
 '''
 ---------------------
 Source term functions
@@ -820,7 +980,7 @@ class StiffFriction(SourceBase):
 		'''
 		self.nu = nu
 
-	def get_source(self, physics, Uq, x, t):
+	def get_source(self, physics, Uq, Aq, x, t):
 		nu = self.nu
 
 		irho, irhou, irhoE = physics.get_state_indices()
@@ -846,6 +1006,65 @@ class StiffFriction(SourceBase):
 		jac[:, :, irhoE, irho] = -nu*vel**2
 		jac[:, :, irhoE, irhou] = 2.0*nu*vel
 
+
+class Quasi1DNozzleSource(SourceBase):
+	'''
+	Stiff source term (1D) of the form:
+	S = [0, nu*rho*u, nu*rho*u^2]
+
+	Attributes:
+	-----------
+	nu: float
+		stiffness parameter
+	'''
+	def get_source(self, physics, Uq, Aq, AGradq, x, t):
+		gamma = physics.gamma
+
+		irho, irhou, irhoE = physics.get_state_indices()
+
+		S = np.zeros_like(Uq)
+
+		rho  = Uq[:, :, irho]  # [n, nq]
+		rhou = Uq[:, :, irhou] # [n, nq]
+		rhoE = Uq[:, :, irhoE] # [n, nq]
+
+		# Get velocity
+		u = rhou / rho
+		# Get squared velocitiy
+		u2 = u**2
+
+		# Calculate pressure using the Ideal Gas Law
+		p = (gamma - 1.)*(rhoE - 0.5 * rho * u2) # [n, nq]
+		# Get total enthalpy
+		rhoH = rhoE + p
+
+		S[:, :, irho] = - rhou / Aq[:, :, 0] * AGradq[:, :, 0]
+		S[:, :, irhou] = - rhou**2. / rho / Aq[:, :, 0] * AGradq[:, :, 0]
+		S[:, :, irhoE] = - u * rhoH / Aq[:, :, 0] * AGradq[:, :, 0]
+
+		return S
+
+	def get_jacobian(self, physics, Uq, Aq, AGradq, x, t):
+		gamma = physics.gamma
+		
+		irho, irhou, irhoE = physics.get_state_indices()
+
+		jac = np.zeros([Uq.shape[0], Uq.shape[1], Uq.shape[-1], Uq.shape[-1]])
+
+		rho  = Uq[:, :, irho]  # [n, nq]
+		rhou = Uq[:, :, irhou] # [n, nq]
+		rhoE = Uq[:, :, irhoE] # [n, nq]
+
+		jac[:, :, irho, irhou] = - 1. / Aq * AGradq
+		jac[:, :, irhou, irho] = rhou**2. / rho**2. / Aq * AGradq
+		jac[:, :, irhou, irhou] = -2. * rhou / rho / Aq * AGradq
+		jac[:, :, irhoE, irho] = - (gamma - 1.) \
+			* (0.5 * rhou**2. / rho**2.) / Aq * AGradq
+		jac[:, :, irhoE, irhou] = - (gamma * rhoE
+							   - (gamma - 1.)
+							   * (0.5 * 3. * rhou**2. / rho)) / Aq * AGradq
+		jac[:, :, irhoE, irhoE] = - gamma * rhou / Aq * AGradq
+
 		return jac
 
 
@@ -857,7 +1076,7 @@ class TaylorGreenSource(SourceBase):
 		Eulerian formulation", PhD Thesis, North Carolina State University,
 		2017.
 	'''
-	def get_source(self, physics, Uq, x, t):
+	def get_source(self, physics, Uq, Aq, x, t):
 		gamma = physics.gamma
 
 		irho, irhou, irhov, irhoE = physics.get_state_indices()
@@ -896,7 +1115,7 @@ class GravitySource(SourceBase):
 		'''
 		self.gravity = gravity
 
-	def get_source(self, physics, Uq, x, t):
+	def get_source(self, physics, Uq, Aq, x, t):
 		# Unpack
 		gamma = physics.gamma
 		g = self.gravity

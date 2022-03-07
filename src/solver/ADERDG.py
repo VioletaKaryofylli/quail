@@ -536,7 +536,7 @@ class ADERDG(base.SolverBase):
 				self.elem_helpers_st, self.bface_helpers_st)
 
 
-	def get_element_residual(self, Uc, res_elem):
+	def get_element_residual(self, Uc, Ac, AGradc, res_elem):
 		physics = self.physics
 		mesh = self.mesh
 		ns = physics.NUM_STATE_VARS
@@ -570,6 +570,10 @@ class ADERDG(base.SolverBase):
 
 		# Interpolate state at quad points
 		Uq = helpers.evaluate_state(Uc, basis_val_st) # [ne, nq_st, ns]
+		Aq = helpers.evaluate_state(Ac, basis_val_st,
+				skip_interp=self.basis.skip_interp) # [ne, nq, ns]
+		AGradq = helpers.evaluate_state(AGradc, basis_val_st,
+				skip_interp=self.basis.skip_interp) # [ne, nq, ns]
 
 		# Interpolate gradient of state at quad points
 		# gUq = solver_tools.evaluate_gradient(nq_tile_constant, Uc, 
@@ -608,7 +612,7 @@ class ADERDG(base.SolverBase):
 			Sq = elem_helpers_st.Sq
 			
 			Sq[:] = 0. # [ne, nq, sr, ndims]
-			Sq = physics.eval_source_terms(Uq, x_elems_st, t, Sq)
+			Sq = physics.eval_source_terms(Uq, Aq, AGradq, x_elems_st, t, Sq)
 
 			res_elem += solver_tools.calculate_source_term_integral(
 					elem_helpers, elem_helpers_st, Sq) # [ne, nb, ns]
@@ -926,7 +930,7 @@ class ADERDG(base.SolverBase):
 
 		return F*dt/2.0 # [ne, nb_st, ns, ndims]
 
-	def source_coefficients(self, dt, order, basis, Up):
+	def source_coefficients(self, dt, order, basis, Up, Ap, AGradp):
 		'''
 		Calculates the polynomial coefficients for the source functions in
 		ADER-DG
@@ -973,7 +977,7 @@ class ADERDG(base.SolverBase):
 			# Evaluate the source term at the quadrature points
 			Sq = np.zeros([Up.shape[0], t.shape[0], ns])
 			S = np.zeros_like(Sq)
-			Sq = physics.eval_source_terms(Up, x_elems_ader, t, Sq)
+			Sq = physics.eval_source_terms(Up, Ap, AGradp, x_elems_ader, t, Sq)
 
 			# Interpolate source coefficient to nodes
 			dg_tools.interpolate_to_nodes(Sq, S)
@@ -1001,7 +1005,7 @@ class ADERDG(base.SolverBase):
 			# Evaluate the source term at the quadrature points
 			Sq = np.zeros_like(Uq)
 			S = np.zeros([Uq.shape[0], nb_st, ns])
-			Sq = physics.eval_source_terms(Uq, x_elems_st, t, Sq)
+			Sq = physics.eval_source_terms(Uq, Ap, AGradp, x_elems_st, t, Sq)
 				# [ne, nq, ns, ndims]
 
 			# Project Sq to the space-time basis coefficients

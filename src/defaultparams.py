@@ -135,6 +135,7 @@ Numerics = {
 		# Sets the threshold requirement for the predictor step's
 		# nonlinear solve. Lower values can be chosen which speeds up
 		# the simulations, but at the cost of some error increase.
+	"Quasi1D" : False,
 }
 
 

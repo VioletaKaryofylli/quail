@@ -655,7 +655,7 @@ class PhysicsBase(ABC):
 
 		return Fnum, FB # [nf, nq, ns, ndim], [nf, nq, nb, ndim], 
 
-	def eval_source_terms(self, Uq, xphys, time, Sq):
+	def eval_source_terms(self, Uq, Aq, AGradq, xphys, time, Sq):
 		'''
 		This method computes the source term(s).
 
@@ -673,11 +673,11 @@ class PhysicsBase(ABC):
 			Sq: sum of the values of source term(s) [ne, nq, ns]
 		'''
 		for source in self.source_terms:
-			Sq += source.get_source(self, Uq, xphys, time)
+			Sq += source.get_source(self, Uq, Aq, AGradq, xphys, time)
 
 		return Sq
 
-	def eval_source_term_jacobians(self, Uq, xphys, time, jac):
+	def eval_source_term_jacobians(self, Uq, Aq, AGradq, xphys, time, jac):
 		'''
 		This method computes the source term Jacobian(s).
 
@@ -695,7 +695,7 @@ class PhysicsBase(ABC):
 			jac: sum of the values of Jacobian(s) [nq, ns]
 		'''
 		for source in self.source_terms:
-			jac += source.get_jacobian(self, Uq, xphys, time)
+			jac += source.get_jacobian(self, Uq, Aq, AGradq, xphys, time)
 
 		return jac
 

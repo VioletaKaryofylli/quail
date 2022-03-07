@@ -141,9 +141,16 @@ class FE(StepperBase):
 		physics = solver.physics
 		mesh = solver.mesh
 		U = solver.state_coeffs
+		quasi1D = solver.params["Quasi1D"]
+		if quasi1D:
+			Area = solver.Area
+			AreaGradient = solver.AreaGradient
+		else:
+			Area = np.ones([U.shape[0], U.shape[1], 1])
+			AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 
 		res = self.res
-		res = solver.get_residual(U, res)
+		res = solver.get_residual(U, Area, AreaGradient, res)
 		dU = solver_tools.mult_inv_mass_matrix(mesh, solver, self.dt, res)
 		U += dU
 
@@ -165,31 +172,38 @@ class RK4(StepperBase):
 		physics = solver.physics
 		mesh = solver.mesh
 		U = solver.state_coeffs
+		quasi1D = solver.params["Quasi1D"]
+		if quasi1D:
+			Area = solver.Area
+			AreaGradient = solver.AreaGradient
+		else:
+			Area = np.ones([U.shape[0], U.shape[1], 1])
+			AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 
 		res = self.res
 
 		# First stage
-		res = solver.get_residual(U, res)
+		res = solver.get_residual(U, Area, AreaGradient, res)
 		dU1 = solver_tools.mult_inv_mass_matrix(mesh, solver, self.dt, res)
 		Utemp = U + 0.5*dU1
 		solver.apply_limiter(Utemp)
 
 		# Second stage
 		solver.time += self.dt/2.
-		res = solver.get_residual(Utemp, res)
+		res = solver.get_residual(Utemp, Area, AreaGradient, res)
 		dU2 = solver_tools.mult_inv_mass_matrix(mesh, solver, self.dt, res)
 		Utemp = U + 0.5*dU2
 		solver.apply_limiter(Utemp)
 
 		# Third stage
-		res = solver.get_residual(Utemp, res)
+		res = solver.get_residual(Utemp, Area, AreaGradient, res)
 		dU3 = solver_tools.mult_inv_mass_matrix(mesh, solver, self.dt, res)
 		Utemp = U + dU3
 		solver.apply_limiter(Utemp)
 
 		# Fourth stage
 		solver.time += self.dt/2.
-		res = solver.get_residual(Utemp, res)
+		res = solver.get_residual(Utemp, Area, AreaGradient, res)
 		dU4 = solver_tools.mult_inv_mass_matrix(mesh, solver, self.dt, res)
 		dU = 1./6.*(dU1 + 2.*dU2 + 2.*dU3 + dU4)
 		U += dU
@@ -250,6 +264,13 @@ class LSRK4(StepperBase):
 		physics = solver.physics
 		mesh = solver.mesh
 		U = solver.state_coeffs
+		quasi1D = solver.params["Quasi1D"]
+		if quasi1D:
+			Area = solver.Area
+			AreaGradient = solver.AreaGradient
+		else:
+			Area = np.ones([U.shape[0], U.shape[1], 1])
+			AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 
 		res = self.res
 		dU = self.dU
@@ -258,7 +279,7 @@ class LSRK4(StepperBase):
 		for istage in range(self.nstages):
 			dt = self.dt
 
-			res = solver.get_residual(U, res)
+			res = solver.get_residual(U, Area, AreaGradient, res)
 			dUtemp = solver_tools.mult_inv_mass_matrix(mesh, solver, dt, res)
 			solver.time = Time + self.rk4c[istage]*dt
 
@@ -313,6 +334,13 @@ class SSPRK3(StepperBase):
 		physics = solver.physics
 		mesh = solver.mesh
 		U = solver.state_coeffs
+		quasi1D = solver.params["Quasi1D"]
+		if quasi1D:
+			Area = solver.Area
+			AreaGradient = solver.AreaGradient
+		else:
+			Area = np.ones([U.shape[0], U.shape[1], 1])
+			AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 
 		res = self.res
 		dU = self.dU
@@ -321,7 +349,7 @@ class SSPRK3(StepperBase):
 		for istage in range(self.nstages):
 			dt = self.dt
 
-			res = solver.get_residual(U, res)
+			res = solver.get_residual(U, Area, AreaGradient, res)
 			dUtemp = solver_tools.mult_inv_mass_matrix(mesh, solver, dt, res)
 			solver.time = Time + dt
 
@@ -356,13 +384,20 @@ class ADER(StepperBase):
 		mesh = solver.mesh
 		W = solver.state_coeffs
 		Up = solver.state_coeffs_pred
+		quasi1D = solver.params["Quasi1D"]
+		if quasi1D:
+			Area = solver.Area
+			AreaGradient = solver.AreaGradient
+		else:
+			Area = np.ones([Up.shape[0], Up.shape[1], 1])
+			AreaGradient = np.zeros([Up.shape[0], Up.shape[1], 1])
 
 		res = self.res
 
 		# Prediction step
-		Up = solver.calculate_predictor_step(solver, self.dt, W, Up)
+		Up = solver.calculate_predictor_step(solver, self.dt, W, Area, AreaGradient, Up)
 		# Correction step
-		res = solver.get_residual(Up, res)
+		res = solver.get_residual(Up, Area, AreaGradient, res)
 
 		dU = solver_tools.mult_inv_mass_matrix(mesh, solver, self.dt/2., res)
 
@@ -471,6 +506,13 @@ class Simpler(Strang):
 		physics = solver.physics
 		mesh  = solver.mesh
 		U = solver.state_coeffs
+		quasi1D = solver.params["Quasi1D"]
+		if quasi1D:
+			Area = solver.Area
+			AreaGradient = solver.AreaGradient
+		else:
+			Area = np.ones([U.shape[0], U.shape[1], 1])
+			AreaGradient = np.zeros([U.shape[0], U.shape[1], 1])
 
 		# Set the appropriate time steps for each operation
 		explicit = self.explicit
@@ -488,7 +530,7 @@ class Simpler(Strang):
 		physics.source_terms = physics.explicit_sources.copy()
 
 		self.balance_const = None
-		balance_const = -1.*solver.get_residual(U, res)
+		balance_const = -1.*solver.get_residual(U, Area, AreaGradient, res)
 		self.balance_const = -1.*balance_const
 
 		# Second: take the implicit full step for the source term.
